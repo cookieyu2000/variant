@@ -1,0 +1,16 @@
+# 忽略所有檔案
+__pycache__/
+**/__pycache__/
+
+BERT/
+**/BERT/
+
+data/
+**/data/
+
+# 忽略檔案
+try.py
+spider.py
+gpu.py
+gene_names.py
+change.py
