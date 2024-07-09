@@ -8,6 +8,7 @@ from urllib3.util.retry import Retry
 # 計數器和文件索引初始化
 data_counter = 0
 file_index = 1
+processed_pmids_file = "data/nen/processed_pmids.json"
 
 def save_data_json(data, pmid):
     '''
@@ -19,8 +20,12 @@ def save_data_json(data, pmid):
     if not os.path.exists("data"):
         os.makedirs("data")
     
+    # 確保 data/nen 資料夾存在
+    if not os.path.exists("data/nen"):
+        os.makedirs("data/nen")
+    
     # 構造文件路徑
-    filepath = f"data/ner/fulltext_{file_index}.json"
+    filepath = f"data/nen/nen_{file_index}.json"
     
     if os.path.exists(filepath):
         with open(filepath, "r", encoding='utf-8') as f:
@@ -46,6 +51,10 @@ def save_data_json(data, pmid):
     if data_counter >= 100:
         data_counter = 0
         file_index += 1
+
+    # 記錄已處理的 PMID
+    with open(processed_pmids_file, "a", encoding='utf-8') as f:
+        f.write(f"{pmid}\n")
 
 def fetch_pubmed_data(pmid):
     '''
@@ -81,8 +90,12 @@ def fetch_pubmed_title(pmid):
         response = requests.get(url)
         if response.status_code == 200:
             result = response.json()
-            title = result['result'][str(pmid)]['title']
-            return title
+            if 'result' in result and str(pmid) in result['result']:
+                title = result['result'][str(pmid)].get('title', None)
+                return title
+            else:
+                print(f"No title found for PMID {pmid}")
+                return None
         else:
             print(f"Request failed with status code {response.status_code}")
             return None
@@ -128,11 +141,20 @@ def process_pmids_from_file(file_path):
     '''
     存入json的格式
     '''
+    processed_pmids = set()
+    if os.path.exists(processed_pmids_file):
+        with open(processed_pmids_file, 'r', encoding='utf-8') as f:
+            processed_pmids = set(line.strip() for line in f)
+    
     with open(file_path, 'r', encoding='utf-8') as f:
         records = json.load(f)
     
     for record in records:
         pmid = record['ID']
+        if pmid in processed_pmids:
+            print(f"PMID {pmid} 已處理，跳過")
+            continue
+        
         hgmd_class = record['label']
         data = fetch_pubmed_data(pmid)
         
@@ -150,28 +172,5 @@ def process_pmids_from_file(file_path):
             print(f"Failed to fetch data for PMID {pmid}.")
 
 if __name__ == "__main__":
-    while True:
-        choice = input("Enter 'pmid' to input a single PubMed ID or 'file' or '0' to process from a JSON file (or type 'exit' to quit): ")
-        if choice.lower() == 'exit':
-            break
-        elif choice.lower() == 'pmid':
-            pmid = input("Enter a PubMed ID: ")
-            data = fetch_pubmed_data(pmid)
-            
-            if data:
-                sections, biotype_dict, _ = extract_relevant_data(data['PubTator3'][0])
-                title = fetch_pubmed_title(pmid)
-                result = {
-                    "title": title,
-                    "text": sections,
-                    "biotype": biotype_dict
-                }
-                save_data_json(result, pmid)
-            else:
-                print(f"Failed to fetch data for PMID {pmid}.")
-        elif choice.lower() == 'file':
-            file_path = input("Enter the path to the JSON file: ")
-            process_pmids_from_file(file_path)
-        elif choice.lower() == '0':
-            file_path = "data/pub_cls.json"
-            process_pmids_from_file(file_path)
+    file_path = "data/pub_cls.json"
+    process_pmids_from_file(file_path)
